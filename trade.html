@@ -17,9 +17,11 @@
   </div>
 </div>
 
+<script src="js/utils.js"></script>
 <script src="js/components.js"></script>
 <script src="js/moex.js"></script>
 <script src="js/chart.js"></script>
+<script src="js/api.js"></script>
 <script>
   document.getElementById('header-mount').outerHTML = renderHeader('market');
 
@@ -32,8 +34,16 @@
   let mode = params.get('mode') === 'sell' ? 'sell' : 'buy';
   let userPosition = null; // { quantity, avg_buy_price }
 
-  // ── Уведомление когда auth.js инициализирует пользователя ──────────────────
-  document.addEventListener('app:userReady', () => loadUserPosition());
+  // ── Auth события ───────────────────────────────────────────────────────────
+  // app:userReady — нужен когда пользователь входит через модалку ПОСЛЕ загрузки страницы
+  // (если сессия уже была — load() сам вызовет loadUserPosition() в конце)
+  document.addEventListener('app:userReady', () => {
+    if (document.getElementById('position-info')) loadUserPosition();
+  });
+  document.addEventListener('app:userLogout', () => {
+    userPosition = null;
+    updatePositionDisplay();
+  });
 
   // ── Позиция пользователя ───────────────────────────────────────────────────
   async function loadUserPosition() {
@@ -41,11 +51,11 @@
     try {
       const user = await window.supabase.auth.getUser();
       if (!user) return;
-      const rows = await window.supabase.from('portfolio')
-        .select('quantity,avg_buy_price').eq('ticker', ticker).execute();
-      userPosition = (rows && rows[0]) || null;
+      userPosition = await api.getPosition(ticker);
       updatePositionDisplay();
-    } catch {}
+    } catch (e) {
+      console.error('loadUserPosition:', e);
+    }
   }
 
   function updatePositionDisplay() {
@@ -127,60 +137,45 @@
   }
 
   async function executeBuy(userId, qty) {
-    const total = qty * stockPrice;
-
-    const profile = await window.supabase.from('profiles').select('balance').single().execute();
+    const total   = qty * stockPrice;
+    const profile = await api.getProfile();
     if (!profile) throw new Error('Не удалось получить баланс');
     if (profile.balance < total) {
-      const balFmt = profile.balance.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      throw new Error(`Недостаточно средств. Баланс: ${balFmt} ₽`);
+      throw new Error(`Недостаточно средств. Баланс: ${fmtRub(profile.balance)}`);
     }
 
-    const rows = await window.supabase.from('portfolio')
-      .select('quantity,avg_buy_price').eq('ticker', ticker).execute();
-    const pos = rows?.[0] || null;
-
-    await window.supabase.from('profiles')
-      .update({ balance: profile.balance - total }).eq('id', userId).execute();
+    const pos = await api.getPosition(ticker);
+    await api.updateBalance(userId, profile.balance - total);
 
     if (pos) {
       const newQty = pos.quantity + qty;
       const newAvg = (pos.quantity * pos.avg_buy_price + qty * stockPrice) / newQty;
-      await window.supabase.from('portfolio')
-        .update({ quantity: newQty, avg_buy_price: newAvg })
-        .eq('user_id', userId).eq('ticker', ticker).execute();
+      await api.updatePosition(userId, ticker, { quantity: newQty, avg_buy_price: newAvg });
     } else {
-      await window.supabase.from('portfolio')
-        .insert({ user_id: userId, ticker, quantity: qty, avg_buy_price: stockPrice }).execute();
+      await api.insertPosition(userId, ticker, qty, stockPrice);
     }
 
-    await window.supabase.from('transactions')
-      .insert({ user_id: userId, ticker, type: 'buy', quantity: qty, price: stockPrice, total_amount: total }).execute();
+    await api.insertTransaction(userId, ticker, 'buy', qty, stockPrice, total);
   }
 
   async function executeSell(userId, qty) {
     if (!userPosition) throw new Error('У вас нет этой акции');
     if (userPosition.quantity < qty) throw new Error(`Недостаточно акций. У вас: ${userPosition.quantity} шт.`);
 
-    const total = qty * stockPrice;
-
-    const profile = await window.supabase.from('profiles').select('balance').single().execute();
+    const total   = qty * stockPrice;
+    const profile = await api.getProfile();
     if (!profile) throw new Error('Не удалось получить баланс');
 
-    await window.supabase.from('profiles')
-      .update({ balance: profile.balance + total }).eq('id', userId).execute();
+    await api.updateBalance(userId, profile.balance + total);
 
     const remaining = userPosition.quantity - qty;
     if (remaining === 0) {
-      await window.supabase.from('portfolio')
-        .delete().eq('user_id', userId).eq('ticker', ticker).execute();
+      await api.deletePosition(userId, ticker);
     } else {
-      await window.supabase.from('portfolio')
-        .update({ quantity: remaining }).eq('user_id', userId).eq('ticker', ticker).execute();
+      await api.updatePosition(userId, ticker, { quantity: remaining });
     }
 
-    await window.supabase.from('transactions')
-      .insert({ user_id: userId, ticker, type: 'sell', quantity: qty, price: stockPrice, total_amount: total }).execute();
+    await api.insertTransaction(userId, ticker, 'sell', qty, stockPrice, total);
   }
 
   // ── Загрузка страницы ──────────────────────────────────────────────────────
@@ -241,19 +236,18 @@
       if (mode === 'sell') switchMode('sell');
 
       // Загрузка графика
-      const fmt  = d => d.toISOString().slice(0, 10);
-      const till = new Date();
-      const from = new Date();
-      from.setDate(from.getDate() - 14);
+      const { from, till } = weekRange();
       try {
-        const candles = await moex.getStockCandles(ticker, 24, fmt(from), fmt(till));
+        const candles = await moex.getStockCandles(ticker, 24, from, till);
         const prices  = candles.map(c => c.close).filter(Boolean);
         if (prices.length >= 2) {
           const chartEl = document.getElementById('stock-chart');
           chartEl.style.background = 'none';
           renderChart(chartEl, prices, { height: 220 });
         }
-      } catch {}
+      } catch (e) {
+        console.warn('chart load failed:', e);
+      }
 
       // Загрузка позиции (если пользователь уже авторизован)
       loadUserPosition();

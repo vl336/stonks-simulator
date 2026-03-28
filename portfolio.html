@@ -15,20 +15,17 @@
   <div id="portfolio-root"></div>
 </div>
 
+<script src="js/utils.js"></script>
 <script src="js/components.js"></script>
 <script src="js/moex.js"></script>
+<script src="js/api.js"></script>
 <script>
   document.getElementById('header-mount').outerHTML = renderHeader('portfolio');
 
   const moex = new MoexClient();
 
   // ── Форматирование ─────────────────────────────────────────────────────────
-  const fmtRub  = n => n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
-  const fmtPct  = n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
-  const fmtDate = s => {
-    const d = new Date(s);
-    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  };
+  // fmtRub, fmtPct, fmtDate — из utils.js
 
   // ── Рендер ─────────────────────────────────────────────────────────────────
   function renderSummary(balance, portfolioValue, pnl, totalAssets) {
@@ -160,14 +157,6 @@
       </div>`;
   }
 
-  function showLoginPrompt() {
-    document.getElementById('portfolio-root').innerHTML = `
-      <div class="login-prompt">
-        <p>Войдите в аккаунт, чтобы увидеть свой портфель</p>
-        <button class="login-prompt-btn" onclick="openLoginModal()">Войти</button>
-      </div>`;
-  }
-
   function showLoading() {
     document.getElementById('portfolio-root').innerHTML = `
       <div class="table-wrap">
@@ -179,21 +168,26 @@
 
   // ── Загрузка данных ────────────────────────────────────────────────────────
   document.addEventListener('app:userReady', loadPortfolio);
+  document.addEventListener('app:userLogout', () =>
+    showLoginPrompt('portfolio-root', 'Войдите в аккаунт, чтобы увидеть свой портфель')
+  );
 
   async function loadPortfolio() {
     if (!window.supabase) return;
 
     const user = await window.supabase.auth.getUser();
-    if (!user) { showLoginPrompt(); return; }
+    if (!user) {
+      showLoginPrompt('portfolio-root', 'Войдите в аккаунт, чтобы увидеть свой портфель');
+      return;
+    }
 
     showLoading();
 
     try {
       const [posRes, txRes, profRes, moexRes] = await Promise.allSettled([
-        window.supabase.from('portfolio').select('*').execute(),
-        window.supabase.from('transactions').select('*')
-          .order('created_at', { ascending: false }).limit(20).execute(),
-        window.supabase.from('profiles').select('balance').single().execute(),
+        api.getPortfolio(),
+        api.getTransactions(20),
+        api.getProfile(),
         moex.getAllStocks(),
       ]);
 

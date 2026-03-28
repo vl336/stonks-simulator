@@ -15,7 +15,9 @@
   <div id="history-root"></div>
 </div>
 
+<script src="js/utils.js"></script>
 <script src="js/components.js"></script>
+<script src="js/api.js"></script>
 <script>
   document.getElementById('header-mount').outerHTML = renderHeader('history');
 
@@ -26,11 +28,7 @@
   let currentPage  = 1;
   const PAGE_SIZE  = 25;
 
-  const fmtRub  = n => parseFloat(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
-  const fmtDate = s => new Date(s).toLocaleString('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
+  // fmtRub, fmtDate — из utils.js
 
   // ── Фильтрация ─────────────────────────────────────────────────────────────
   function getFiltered() {
@@ -77,23 +75,8 @@
   }
 
   function renderPagination(totalPages) {
-    if (totalPages <= 1) return '';
-    const WINDOW = 2;
-    const pages = [1];
-    if (currentPage - WINDOW > 2) pages.push('…');
-    for (let p = Math.max(2, currentPage - WINDOW); p <= Math.min(totalPages - 1, currentPage + WINDOW); p++) pages.push(p);
-    if (currentPage + WINDOW < totalPages - 1) pages.push('…');
-    if (totalPages > 1) pages.push(totalPages);
-
-    return `
-      <div class="pagination">
-        <button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹</button>
-        ${pages.map(p => p === '…'
-          ? `<span class="page-ellipsis">…</span>`
-          : `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goToPage(${p})">${p}</button>`
-        ).join('')}
-        <button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>›</button>
-      </div>`;
+    const inner = buildPaginationHTML(currentPage, totalPages, 'goToPage');
+    return inner ? `<div class="pagination">${inner}</div>` : '';
   }
 
   function renderTable() {
@@ -106,7 +89,7 @@
     const rows = page.length
       ? page.map(t => `
         <tr>
-          <td class="muted">${fmtDate(t.created_at)}</td>
+          <td class="muted">${fmtDate(t.created_at, true)}</td>
           <td>
             <span class="ticker-badge" onclick="filterByTicker('${t.ticker}')">${t.ticker}</span>
           </td>
@@ -200,18 +183,18 @@
   }
 
   // ── Загрузка данных ────────────────────────────────────────────────────────
-  function showLoginPrompt() {
-    document.getElementById('history-root').innerHTML = `
-      <div class="login-prompt">
-        <p>Войдите в аккаунт, чтобы увидеть историю сделок</p>
-        <button class="login-prompt-btn" onclick="openLoginModal()">Войти</button>
-      </div>`;
-  }
+  document.addEventListener('app:userLogout', () => {
+    allTxs = [];
+    showLoginPrompt('history-root', 'Войдите в аккаунт, чтобы увидеть историю сделок');
+  });
 
   document.addEventListener('app:userReady', async function () {
     if (!window.supabase) return;
     const user = await window.supabase.auth.getUser();
-    if (!user) { showLoginPrompt(); return; }
+    if (!user) {
+      showLoginPrompt('history-root', 'Войдите в аккаунт, чтобы увидеть историю сделок');
+      return;
+    }
 
     document.getElementById('history-root').innerHTML = `
       <div class="table-wrap">
@@ -219,8 +202,7 @@
       </div>`;
 
     try {
-      const txs = await window.supabase.from('transactions').select('*')
-        .order('created_at', { ascending: false }).execute();
+      const txs = await api.getTransactions();
       allTxs = txs || [];
       render();
     } catch (e) {

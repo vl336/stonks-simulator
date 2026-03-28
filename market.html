@@ -32,6 +32,7 @@
 
 </div>
 
+<script src="js/utils.js"></script>
 <script src="js/components.js"></script>
 <script src="js/moex.js"></script>
 <script src="js/chart.js"></script>
@@ -54,14 +55,6 @@
     za:        { sort: (a, b) => (b.SHORTNAME || '').localeCompare(a.SHORTNAME || '', 'ru') },
   };
 
-  function weekRange() {
-    const fmt = d => d.toISOString().slice(0, 10);
-    const till = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - 14);
-    return { from: fmt(from), till: fmt(till) };
-  }
-
   async function loadCharts(stocks) {
     const { from, till } = weekRange();
     for (const stock of stocks) {
@@ -79,29 +72,8 @@
   }
 
   function renderPagination(totalPages) {
-    const el = document.getElementById('pagination');
-    if (totalPages <= 1) { el.innerHTML = ''; return; }
-
-    const WINDOW = 2; // страниц по бокам от текущей
-    const pages = [];
-
-    pages.push(1);
-    if (currentPage - WINDOW > 2) pages.push('…');
-    for (let p = Math.max(2, currentPage - WINDOW); p <= Math.min(totalPages - 1, currentPage + WINDOW); p++) {
-      pages.push(p);
-    }
-    if (currentPage + WINDOW < totalPages - 1) pages.push('…');
-    if (totalPages > 1) pages.push(totalPages);
-
-    el.innerHTML = `
-      <button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹</button>
-      ${pages.map(p =>
-        p === '…'
-          ? `<span class="page-ellipsis">…</span>`
-          : `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goToPage(${p})">${p}</button>`
-      ).join('')}
-      <button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>›</button>
-    `;
+    document.getElementById('pagination').innerHTML =
+      buildPaginationHTML(currentPage, totalPages, 'goToPage');
   }
 
   function getFiltered() {

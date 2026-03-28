@@ -44,17 +44,17 @@
 
 </div>
 
+<script src="js/utils.js"></script>
 <script src="js/components.js"></script>
 <script src="js/moex.js"></script>
 <script src="js/chart.js"></script>
+<script src="js/api.js"></script>
 <script>
   document.getElementById('header-mount').outerHTML = renderHeader('home');
 
   const moex = new MoexClient();
   let allStocks = [];
   let cachedPositions = null; // сохраняем позиции, чтобы пересчитать когда придут цены MOEX
-
-  const fmt = n => n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const FILTERS = {
     turnover:  { label: 'Топ по обороту за день',  sort: (a, b) => (b.VALTODAY || 0) - (a.VALTODAY || 0) },
@@ -83,14 +83,14 @@
       costBasis += parseFloat(pos.avg_buy_price) * pos.quantity;
     }
 
-    document.getElementById('dashboard-portfolio').textContent = fmt(portfolioValue) + ' ₽';
+    document.getElementById('dashboard-portfolio').textContent = fmtRub(portfolioValue);
 
     const pnl = portfolioValue - costBasis;
     if (costBasis > 0) {
       const pnlSign  = pnl >= 0 ? '+' : '';
       const pnlPct   = ((pnl / costBasis) * 100).toFixed(2);
       const pnlEl    = document.getElementById('dashboard-pnl');
-      pnlEl.textContent = `${pnlSign}${fmt(pnl)} ₽ (${pnlSign}${pnlPct}%)`;
+      pnlEl.textContent = `${pnlSign}${fmtRub(pnl)} (${pnlSign}${pnlPct}%)`;
       pnlEl.className   = pnl >= 0 ? 'green' : 'red-text';
     }
   }
@@ -102,12 +102,12 @@
 
     try {
       const [profile, positions] = await Promise.all([
-        window.supabase.from('profiles').select('balance').single().execute(),
-        window.supabase.from('portfolio').select('ticker,quantity,avg_buy_price').execute(),
+        api.getProfile(),
+        api.getPortfolio(),
       ]);
 
       if (profile?.balance !== undefined) {
-        document.getElementById('dashboard-balance').textContent = fmt(parseFloat(profile.balance)) + ' ₽';
+        document.getElementById('dashboard-balance').textContent = fmtRub(profile.balance);
         document.getElementById('dashboard-balance-sub').textContent = '';
       }
 
@@ -127,14 +127,6 @@
   });
 
   // ── Топ акций ──────────────────────────────────────────────────────────────
-
-  function weekRange() {
-    const fmt = d => d.toISOString().slice(0, 10);
-    const till = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - 14);
-    return { from: fmt(from), till: fmt(till) };
-  }
 
   async function loadCharts(stocks) {
     const { from, till } = weekRange();
