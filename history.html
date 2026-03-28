@@ -48,7 +48,8 @@
     const sells = allTxs.filter(t => t.type === 'sell');
     const totalBought = buys.reduce((s, t) => s + parseFloat(t.total_amount), 0);
     const totalSold   = sells.reduce((s, t) => s + parseFloat(t.total_amount), 0);
-    const realized    = totalSold - totalBought;
+
+    const realized      = totalSold - totalBought;
     const realizedClass = realized >= 0 ? 'green' : 'red';
     const realizedSign  = realized >= 0 ? '+' : '';
 
@@ -207,7 +208,7 @@
       </div>`;
   }
 
-  window.onUserReady = async function () {
+  document.addEventListener('app:userReady', async function () {
     if (!window.supabase) return;
     const user = await window.supabase.auth.getUser();
     if (!user) { showLoginPrompt(); return; }
@@ -229,7 +230,7 @@
         </div>`;
       console.error(e);
     }
-  };
+  });
 </script>
 
 <script type="module" src="js/auth.js"></script>

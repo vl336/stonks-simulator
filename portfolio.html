@@ -178,7 +178,7 @@
   }
 
   // ── Загрузка данных ────────────────────────────────────────────────────────
-  window.onUserReady = loadPortfolio;
+  document.addEventListener('app:userReady', loadPortfolio);
 
   async function loadPortfolio() {
     if (!window.supabase) return;
@@ -189,7 +189,7 @@
     showLoading();
 
     try {
-      const [positions, transactions, profile, moexData] = await Promise.all([
+      const [posRes, txRes, profRes, moexRes] = await Promise.allSettled([
         window.supabase.from('portfolio').select('*').execute(),
         window.supabase.from('transactions').select('*')
           .order('created_at', { ascending: false }).limit(20).execute(),
@@ -197,13 +197,27 @@
         moex.getAllStocks(),
       ]);
 
-      // Карта текущих цен и названий из MOEX
-      const stockMap = new Map(
-        moex.merge(moexData.securities, moexData.marketdata).map(s => [s.SECID, s])
-      );
+      if (posRes.status === 'rejected') throw posRes.reason;
+      if (txRes.status  === 'rejected') throw txRes.reason;
+      if (profRes.status === 'rejected') throw profRes.reason;
+
+      const positions     = posRes.value || [];
+      const transactions  = txRes.value  || [];
+      const profile       = profRes.value;
+
+      // Карта текущих цен и названий из MOEX (необязательно — если MOEX недоступен, покажем без цен)
+      let stockMap = new Map();
+      if (moexRes.status === 'fulfilled') {
+        const moexData = moexRes.value;
+        stockMap = new Map(
+          moex.merge(moexData.securities, moexData.marketdata).map(s => [s.SECID, s])
+        );
+      } else {
+        console.error('MOEX unavailable:', moexRes.reason);
+      }
 
       // Обогащаем позиции текущими ценами
-      const enriched = (positions || []).map(p => {
+      const enriched = positions.map(p => {
         const stock        = stockMap.get(p.ticker);
         const currentPrice = stock?.LAST || parseFloat(p.avg_buy_price);
         const avgPrice     = parseFloat(p.avg_buy_price);
@@ -222,7 +236,7 @@
       document.getElementById('portfolio-root').innerHTML =
         renderSummary(balance, portfolioValue, totalPnl, totalAssets) +
         renderPositions(enriched) +
-        renderTransactions(transactions || []);
+        renderTransactions(transactions);
 
     } catch (e) {
       document.getElementById('portfolio-root').innerHTML =

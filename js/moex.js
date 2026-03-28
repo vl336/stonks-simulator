@@ -7,18 +7,22 @@ class MoexClient {
   constructor(options = {}) {
     this.baseUrl = options.baseUrl || 'https://iss.moex.com/iss';
     this.rateLimitMs = options.rateLimitMs || 500; // ~2 req/sec
-    this._lastRequestAt = 0;
+    this._queue = Promise.resolve();
+    this._cache = new Map();
   }
 
   // ─── Internals ────────────────────────────────────────────────────────────
 
-  async _throttle() {
-    const wait = this.rateLimitMs - (Date.now() - this._lastRequestAt);
-    if (wait > 0) await new Promise(r => setTimeout(r, wait));
-    this._lastRequestAt = Date.now();
+  _throttle() {
+    this._queue = this._queue.then(() => new Promise(r => setTimeout(r, this.rateLimitMs)));
+    return this._queue;
   }
 
   async _fetch(path, params = {}) {
+    const cacheKey = path + JSON.stringify(params);
+    const cached = this._cache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < 60_000) return cached.data;
+
     await this._throttle();
 
     const url = new URL(`${this.baseUrl}/${path}.json`);
@@ -29,7 +33,9 @@ class MoexClient {
 
     const res = await fetch(url.toString());
     if (!res.ok) throw new Error(`MOEX API error: ${res.status} ${res.statusText}`);
-    return res.json();
+    const data = await res.json();
+    this._cache.set(cacheKey, { data, ts: Date.now() });
+    return data;
   }
 
   /**

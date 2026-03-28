@@ -100,7 +100,7 @@ class QueryBuilder {
     if (res.status === 204) return null;
 
     const data = await res.json();
-    return this._single ? data : data;
+    return this._single ? (Array.isArray(data) ? data[0] : data) : data;
   }
 }
 

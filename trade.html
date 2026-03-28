@@ -33,7 +33,7 @@
   let userPosition = null; // { quantity, avg_buy_price }
 
   // ── Уведомление когда auth.js инициализирует пользователя ──────────────────
-  window.onUserReady = () => loadUserPosition();
+  document.addEventListener('app:userReady', () => loadUserPosition());
 
   // ── Позиция пользователя ───────────────────────────────────────────────────
   async function loadUserPosition() {

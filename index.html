@@ -95,7 +95,7 @@
     }
   }
 
-  window.onUserReady = async function () {
+  document.addEventListener('app:userReady', async function () {
     if (!window.supabase) return;
     const user = await window.supabase.auth.getUser();
     if (!user) return;
@@ -116,15 +116,15 @@
     } catch (e) {
       console.error(e);
     }
-  };
+  });
 
-  window.onUserLogout = function () {
+  document.addEventListener('app:userLogout', function () {
     cachedPositions = null;
     document.getElementById('dashboard-balance').textContent    = '—';
     document.getElementById('dashboard-balance-sub').textContent = 'Войдите в аккаунт';
     document.getElementById('dashboard-portfolio').textContent  = '—';
     document.getElementById('dashboard-pnl').textContent        = '';
-  };
+  });
 
   // ── Топ акций ──────────────────────────────────────────────────────────────
 

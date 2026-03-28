@@ -45,7 +45,7 @@ async function loadBalance() {
       const fmt = profile.balance.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       document.getElementById('profile-balance').textContent = `Баланс: ${fmt} ₽`;
     }
-  } catch {}
+  } catch (e) { console.error('loadBalance error:', e); }
 }
 
 window.refreshBalance = loadBalance;
@@ -80,7 +80,7 @@ window.handleLogin = async () => {
     document.getElementById('login-modal').style.display = 'none';
     showProfile(name);
     await loadBalance();
-    window.onUserReady?.();
+    document.dispatchEvent(new CustomEvent('app:userReady', { detail: user }));
   } catch (e) {
     errorEl.textContent = e.message;
   } finally {
@@ -110,7 +110,7 @@ window.handleRegister = async () => {
     document.getElementById('register-modal').style.display = 'none';
     showProfile(username);
     await loadBalance();
-    window.onUserReady?.();
+    document.dispatchEvent(new CustomEvent('app:userReady', { detail: { user_metadata: { username } } }));
   } catch (e) {
     errorEl.textContent = e.message;
   } finally {
@@ -125,7 +125,7 @@ window.handleLogout = async () => {
   document.getElementById('logout-btn').style.display    = 'none';
   document.getElementById('login-btn').style.display     = 'block';
   document.getElementById('profile-balance').textContent = 'Баланс: —';
-  window.onUserLogout?.();
+  document.dispatchEvent(new CustomEvent('app:userLogout'));
 };
 
 // ── Проверка сессии при загрузке ────────────────────────────────────────────
@@ -133,5 +133,5 @@ const user = await supabase.auth.getUser();
 if (user) {
   showProfile(user.user_metadata?.username || user.email);
   await loadBalance();
-  window.onUserReady?.();
+  document.dispatchEvent(new CustomEvent('app:userReady', { detail: user }));
 }
