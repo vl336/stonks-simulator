@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p css js)",
+      "Bash(mv common.css index.css market.css trade.css css/)",
+      "Bash(mv components.js moex.js index.js js/)",
+      "Bash(supabase --version)",
+      "Bash(npx supabase:*)",
+      "Bash(docker --version)",
+      "Bash(curl -s \"https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities/SBER/candles.json?interval=24&from=2026-03-10&till=2026-03-27&iss.meta=off\")",
+      "Bash(supabase migration:*)",
+      "Bash(wc:*)"
+    ]
+  }
+}

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>StonksSimulator - Портфель</title>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/portfolio.css">
+</head>
+<body>
+
+<div id="header-mount"></div>
+
+<div class="container">
+  <h1>Мой портфель</h1>
+  <div id="portfolio-root"></div>
+</div>
+
+<script src="js/components.js"></script>
+<script src="js/moex.js"></script>
+<script>
+  document.getElementById('header-mount').outerHTML = renderHeader('portfolio');
+
+  const moex = new MoexClient();
+
+  // ── Форматирование ─────────────────────────────────────────────────────────
+  const fmtRub  = n => n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  const fmtPct  = n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+  const fmtDate = s => {
+    const d = new Date(s);
+    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  // ── Рендер ─────────────────────────────────────────────────────────────────
+  function renderSummary(balance, portfolioValue, pnl, totalAssets) {
+    const pnlClass = pnl >= 0 ? 'green' : 'red';
+    const pnlSign  = pnl >= 0 ? '+' : '';
+    const pnlPct   = portfolioValue > 0
+      ? fmtPct((pnl / (portfolioValue - pnl)) * 100)
+      : '0.00%';
+
+    return `
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-label">Свободные средства</div>
+          <div class="summary-value">${fmtRub(balance)}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Стоимость акций</div>
+          <div class="summary-value">${fmtRub(portfolioValue)}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Итого активов</div>
+          <div class="summary-value">${fmtRub(totalAssets)}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Прибыль / Убыток</div>
+          <div class="summary-value ${pnlClass}">${pnlSign}${fmtRub(pnl)}</div>
+          <div class="summary-sub ${pnlClass}">${pnlSign}${pnlPct}</div>
+        </div>
+      </div>`;
+  }
+
+  function renderPositions(positions) {
+    if (!positions.length) {
+      return `
+        <h2>Открытые позиции</h2>
+        <div class="table-wrap">
+          <table><tbody>
+            <tr><td class="td-empty">У вас пока нет акций. <a href="market.html">Перейти на рынок →</a></td></tr>
+          </tbody></table>
+        </div>`;
+    }
+
+    const rows = positions.map(p => {
+      const pnlClass = p.pnl >= 0 ? 'green' : 'red';
+      const pnlSign  = p.pnl >= 0 ? '+' : '';
+      return `
+        <tr>
+          <td class="ticker-cell">
+            <strong>${p.name}</strong>
+            <span>${p.ticker}</span>
+          </td>
+          <td class="right">${p.quantity} шт.</td>
+          <td class="right">${fmtRub(p.avg_buy_price)}</td>
+          <td class="right">${fmtRub(p.currentPrice)}</td>
+          <td class="right">${fmtRub(p.currentValue)}</td>
+          <td class="right ${pnlClass}">${pnlSign}${fmtRub(p.pnl)}</td>
+          <td class="right ${pnlClass}">${pnlSign}${p.pnlPct.toFixed(2)}%</td>
+          <td>
+            <div class="btn-group">
+              <button class="btn-sm btn-buy"  onclick="location.href='trade.html?ticker=${p.ticker}&mode=buy'">Купить</button>
+              <button class="btn-sm btn-sell" onclick="location.href='trade.html?ticker=${p.ticker}&mode=sell'">Продать</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+
+    return `
+      <h2>Открытые позиции</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Компания</th>
+              <th class="right">Кол-во</th>
+              <th class="right">Ср. цена</th>
+              <th class="right">Тек. цена</th>
+              <th class="right">Стоимость</th>
+              <th class="right">P&amp;L ₽</th>
+              <th class="right">P&amp;L %</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function renderTransactions(txs) {
+    if (!txs.length) {
+      return `
+        <h2>История сделок</h2>
+        <div class="table-wrap">
+          <table><tbody>
+            <tr><td class="td-empty">Сделок пока не было</td></tr>
+          </tbody></table>
+        </div>`;
+    }
+
+    const rows = txs.map(t => {
+      const typeLabel = t.type === 'buy' ? 'Покупка' : 'Продажа';
+      const typeClass = t.type === 'buy' ? 'badge-buy' : 'badge-sell';
+      return `
+        <tr>
+          <td class="muted">${fmtDate(t.created_at)}</td>
+          <td><strong>${t.ticker}</strong></td>
+          <td class="${typeClass}">${typeLabel}</td>
+          <td class="right">${t.quantity} шт.</td>
+          <td class="right">${fmtRub(parseFloat(t.price))}</td>
+          <td class="right">${fmtRub(parseFloat(t.total_amount))}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+      <h2>История сделок</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Дата</th>
+              <th>Тикер</th>
+              <th>Тип</th>
+              <th class="right">Кол-во</th>
+              <th class="right">Цена</th>
+              <th class="right">Сумма</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function showLoginPrompt() {
+    document.getElementById('portfolio-root').innerHTML = `
+      <div class="login-prompt">
+        <p>Войдите в аккаунт, чтобы увидеть свой портфель</p>
+        <button class="login-prompt-btn" onclick="openLoginModal()">Войти</button>
+      </div>`;
+  }
+
+  function showLoading() {
+    document.getElementById('portfolio-root').innerHTML = `
+      <div class="table-wrap">
+        <table><tbody>
+          <tr><td class="td-loading">Загрузка...</td></tr>
+        </tbody></table>
+      </div>`;
+  }
+
+  // ── Загрузка данных ────────────────────────────────────────────────────────
+  window.onUserReady = loadPortfolio;
+
+  async function loadPortfolio() {
+    if (!window.supabase) return;
+
+    const user = await window.supabase.auth.getUser();
+    if (!user) { showLoginPrompt(); return; }
+
+    showLoading();
+
+    try {
+      const [positions, transactions, profile, moexData] = await Promise.all([
+        window.supabase.from('portfolio').select('*').execute(),
+        window.supabase.from('transactions').select('*')
+          .order('created_at', { ascending: false }).limit(20).execute(),
+        window.supabase.from('profiles').select('balance').single().execute(),
+        moex.getAllStocks(),
+      ]);
+
+      // Карта текущих цен и названий из MOEX
+      const stockMap = new Map(
+        moex.merge(moexData.securities, moexData.marketdata).map(s => [s.SECID, s])
+      );
+
+      // Обогащаем позиции текущими ценами
+      const enriched = (positions || []).map(p => {
+        const stock        = stockMap.get(p.ticker);
+        const currentPrice = stock?.LAST || parseFloat(p.avg_buy_price);
+        const avgPrice     = parseFloat(p.avg_buy_price);
+        const currentValue = currentPrice * p.quantity;
+        const costBasis    = avgPrice * p.quantity;
+        const pnl          = currentValue - costBasis;
+        const pnlPct       = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
+        return { ...p, name: stock?.SHORTNAME || p.ticker, currentPrice, currentValue, pnl, pnlPct };
+      });
+
+      const balance        = parseFloat(profile?.balance || 0);
+      const portfolioValue = enriched.reduce((s, p) => s + p.currentValue, 0);
+      const totalPnl       = enriched.reduce((s, p) => s + p.pnl, 0);
+      const totalAssets    = balance + portfolioValue;
+
+      document.getElementById('portfolio-root').innerHTML =
+        renderSummary(balance, portfolioValue, totalPnl, totalAssets) +
+        renderPositions(enriched) +
+        renderTransactions(transactions || []);
+
+    } catch (e) {
+      document.getElementById('portfolio-root').innerHTML =
+        '<div class="table-wrap"><table><tbody><tr><td class="td-empty">Ошибка загрузки данных</td></tr></tbody></table></div>';
+      console.error(e);
+    }
+  }
+</script>
+
+<script type="module" src="js/auth.js"></script>
+
+</body>
+</html>
